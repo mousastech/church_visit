@@ -1,10 +1,11 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { UserPlus, MonitorPlay, Share2, RefreshCw, Maximize, Trash2, LockKeyhole, LogOut } from "lucide-react";
+import { UserPlus, MonitorPlay, Share2, RefreshCw, Maximize, Trash2, LockKeyhole, LogOut, Presentation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { downloadVisitorsPptx } from "@/lib/pptx";
 
 type Visitor={id:string;name:string;phone:string;visitDate:string;service:string;notes:string;approved:boolean|number;createdAt:string};
 const today=()=>new Date().toLocaleDateString("sv-SE",{timeZone:"America/Sao_Paulo"});
@@ -15,7 +16,7 @@ export default function VisitorsApp(){
   const [rows,setRows]=useState<Visitor[]>([]);
   const [name,setName]=useState(""),[phone,setPhone]=useState(""),[service,setService]=useState("Culto"),[notes,setNotes]=useState(""),[approved,setApproved]=useState(false);
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[message,setMessage]=useState(""),[error,setError]=useState("");
-  const [screen,setScreen]=useState(false);
+  const [screen,setScreen]=useState(false),[pptBusy,setPptBusy]=useState(false);
   const [authRequired,setAuthRequired]=useState(false),[password,setPassword]=useState(""),[loginBusy,setLoginBusy]=useState(false);
   useEffect(()=>{setScreen(new URLSearchParams(location.search).has("tela"));},[]);
   useEffect(()=>{const saved=localStorage.getItem("admsbc:last-service");if(saved)setService(saved)},[]);
@@ -56,6 +57,11 @@ export default function VisitorsApp(){
     try{if(navigator.share)await navigator.share({title:"Visitantes para o telão",text});else{await navigator.clipboard.writeText(text);setMessage("Lista copiada. Cole na conversa da equipe de mídia.")}}
     catch(e){if((e as Error).name!=="AbortError")setError("Não foi possível compartilhar. Tente copiar a lista novamente.")}
   }
+  async function downloadPptx(){
+    if(!visible.length)return;setPptBusy(true);setError("");
+    try{await downloadVisitorsPptx(visible.map(v=>({name:v.name,notes:v.notes||""})),pretty(date),date)}
+    catch{setError("Não foi possível gerar o PowerPoint. Tente novamente.")}finally{setPptBusy(false)}
+  }
   useEffect(()=>{
     const ctx=(document as Document & {modelContext?:{registerTool:(tool:unknown,opts:{signal:AbortSignal})=>void|Promise<void>}}).modelContext;
     if(!ctx?.registerTool)return;const c=new AbortController();
@@ -64,14 +70,14 @@ export default function VisitorsApp(){
   },[date,visible]);
   if(authRequired)return <main className="login-shell"><section className="login-card"><img className="login-logo" src="/logo-admsbc.png" alt="Assembleia de Deus — Ministério São Bernardo do Campo"/><div className="login-icon"><LockKeyhole size={24}/></div><h1>Gestão de Visitantes</h1><p>Digite a senha da equipe para acessar o cadastro e o telão.</p>{error&&<div className="message error" role="alert">{error}</div>}<form onSubmit={login}><label className="field">Senha<Input autoFocus required type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha de acesso"/></label><Button type="submit" disabled={loginBusy} className="button primary full">{loginBusy?"Entrando...":"Entrar"}</Button></form></section></main>;
   if(screen)return <main className="screen">
-    <div className="screen-controls"><Button className="button" onClick={()=>document.documentElement.requestFullscreen?.()}><Maximize size={18}/> Tela cheia</Button><Button className="button" onClick={()=>{location.href="/"}}>Sair</Button></div>
+    <div className="screen-controls"><Button className="button" onClick={()=>void downloadPptx()} disabled={!visible.length||pptBusy}><Presentation size={18}/> {pptBusy?"Gerando...":"Baixar PowerPoint"}</Button><Button className="button" onClick={()=>document.documentElement.requestFullscreen?.()}><Maximize size={18}/> Tela cheia</Button><Button className="button" onClick={()=>{location.href="/"}}>Sair</Button></div>
     <div className="screen-top"><div className="screen-brand"><img className="screen-logo" src="/logo-admsbc.png" alt="Assembleia de Deus — Ministério São Bernardo do Campo"/><strong>ADMSBC</strong></div><span>{pretty(date)}</span></div>
     <div className="screen-title"><label>Recepção</label><h1>Sejam bem-vindos!</h1><p>É uma alegria receber vocês em nossa igreja.</p></div>
     <div className={`screen-names ${visible.length>6?"many":""}`}>{loading?<div className="screen-empty">Carregando...</div>:visible.length?visible.map(v=><div className="screen-visitor" key={v.id}><span className="screen-name">{v.name}</span><span className={`screen-note ${v.notes?"":"screen-note-empty"}`}>{v.notes||"Visitante"}</span></div>):<div className="screen-empty">Bem-vindos à nossa igreja!</div>}</div>
     <div className="screen-bottom"><span>Uma casa de fé para toda a família</span><span>Atualização automática</span></div>
   </main>;
   return <main className="shell">
-    <header className="top"><div className="brand"><img className="brand-logo" src="/logo-admsbc.png" alt="Assembleia de Deus — Ministério São Bernardo do Campo"/><span>Gestão de Visitantes<small>ADMSBC · RECEPÇÃO</small></span></div><div className="actions"><Button variant="ghost" className="button" onClick={()=>void logout()}><LogOut size={17}/> Sair</Button><Button variant="outline" className="button" onClick={()=>void share()} disabled={!visible.length}><Share2 size={17}/> Enviar à mídia</Button><Button className="button primary" onClick={()=>window.open(projectionUrl(),"_blank","noopener,noreferrer")}><MonitorPlay size={18}/> Abrir telão</Button></div></header>
+    <header className="top"><div className="brand"><img className="brand-logo" src="/logo-admsbc.png" alt="Assembleia de Deus — Ministério São Bernardo do Campo"/><span>Gestão de Visitantes<small>ADMSBC · RECEPÇÃO</small></span></div><div className="actions"><Button variant="ghost" className="button" onClick={()=>void logout()}><LogOut size={17}/> Sair</Button><Button variant="outline" className="button" onClick={()=>void share()} disabled={!visible.length}><Share2 size={17}/> Enviar à mídia</Button><Button variant="outline" className="button" onClick={()=>void downloadPptx()} disabled={!visible.length||pptBusy}><Presentation size={17}/> {pptBusy?"Gerando...":"Baixar PowerPoint"}</Button><Button className="button primary" onClick={()=>window.open(projectionUrl(),"_blank","noopener,noreferrer")}><MonitorPlay size={18}/> Abrir telão</Button></div></header>
     <div className="heading"><div><h1>Visitantes</h1><p>Cadastre, revise e prepare os nomes para o culto.</p></div><span style={{color:"#5b7892",fontWeight:700}}>{rows.length} cadastrado{rows.length===1?"":"s"} · {visible.length} no telão</span></div>
     {error&&<div className="message error" role="alert">{error}</div>}{message&&<div className="message" role="status">{message}</div>}
     <div className="grid"><section className="panel form-panel"><h2 className="panel-title"><UserPlus size={20} style={{verticalAlign:"middle",marginRight:8,color:"#1264a6"}}/>Novo visitante</h2>
