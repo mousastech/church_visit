@@ -73,5 +73,28 @@ export async function downloadVisitorsPptx(visitors: SlideVisitor[], dateLabel: 
     }
   }
 
+  // Tela final: todos os nomes em grade, com a mesma fonte, no maior tamanho que cabe.
+  if (visitors.length) {
+    const slide = pptx.addSlide();
+    base(slide);
+    const logoW = 1.75, logoH = 1.2, top = MARGIN + logoH + 0.15;
+    slide.addImage({ path: "/logo-admsbc.png", x: W - MARGIN - logoW, y: MARGIN - 0.1, w: logoW, h: logoH, sizing: { type: "contain", w: logoW, h: logoH } });
+    slide.addText("Sejam bem-vindos!", { x: MARGIN, y: MARGIN - 0.1, w: W - MARGIN * 2 - logoW - 0.3, h: logoH, fontFace: "Arial", bold: true, color: ACCENT, fontSize: 54, valign: "middle", margin: 0, fit: "none" });
+    const areaW = W - MARGIN * 2, areaH = H - top - MARGIN, gap = 0.3;
+    const widest = Math.max(...visitors.map(v => textWidth(v.name.trim()))) * 1.06;
+    let grid = { cols: 1, rows: visitors.length, size: 0 };
+    for (let cols = 1; cols <= Math.min(4, visitors.length); cols++) {
+      const rows = Math.ceil(visitors.length / cols);
+      const cellW = (areaW - gap * (cols - 1)) / cols, cellH = areaH / rows;
+      const size = Math.floor(Math.min((cellW * 72) / widest, (cellH * 72) / 1.2, 120));
+      if (size > grid.size) grid = { cols, rows, size };
+    }
+    const cellW = (areaW - gap * (grid.cols - 1)) / grid.cols, cellH = areaH / grid.rows;
+    visitors.forEach((v, i) => {
+      const col = Math.floor(i / grid.rows), row = i % grid.rows;
+      slide.addText(v.name.trim(), { x: MARGIN + col * (cellW + gap), y: top + row * cellH, w: cellW, h: cellH, fontFace: "Arial", bold: true, color: "FFFFFF", fontSize: grid.size, align: grid.cols === 1 ? "center" : "left", valign: "middle", margin: 0, fit: "none" });
+    });
+  }
+
   await pptx.writeFile({ fileName: `visitantes-${fileDate}.pptx` });
 }
